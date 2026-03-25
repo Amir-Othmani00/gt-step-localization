@@ -12,45 +12,54 @@ def read_combined_file(file_path: str):
     data = np.load(file_path, allow_pickle=True)
     
     num_steps = int(data['num_steps'])
+    recording_ids = data['recording_ids']
     print(f"=== Combined Step Features File ===")
     print(f"Total number of steps: {num_steps}")
-    print(f"\nFirst 10 steps:")
+    print(f"Total recordings: {len(recording_ids)}")
+    print(f"\nFirst recording details:")
     print("-" * 80)
     
-    for idx in range(min(10, num_steps)):
-        prefix = f"step_{idx:05d}"
-        recording_id = str(data[f"{prefix}_recording_id"])
-        step_id = int(data[f"{prefix}_step_id"])
-        start_time = float(data[f"{prefix}_start_time"])
-        end_time = float(data[f"{prefix}_end_time"])
-        description = str(data[f"{prefix}_description"])
-        num_frames = int(data[f"{prefix}_num_frames"])
-        features_shape = data[f"{prefix}_features"].shape
-        
-        print(f"\nStep {idx}:")
-        print(f"  Recording ID: {recording_id}")
-        print(f"  Step ID: {step_id}")
-        print(f"  Time: {start_time:.2f}s - {end_time:.2f}s ({end_time-start_time:.2f}s)")
-        print(f"  Description: {description}")
-        print(f"  Frames: {num_frames}")
-        print(f"  Features shape: {features_shape}")
+    # Show first recording info
+    if len(recording_ids) > 0:
+        recording_id = recording_ids[0]
+        rec_num_steps = int(data[f"{recording_id}_num_steps"])
+        print(f"\nRecording {recording_id}:")
+        print(f"  Number of steps: {rec_num_steps}")
+        for idx in range(min(5, rec_num_steps)):
+            prefix = f"{recording_id}_step_{idx:03d}"
+            step_id = int(data[f"{prefix}_step_id"])
+            start_time = float(data[f"{prefix}_start_time"])
+            end_time = float(data[f"{prefix}_end_time"])
+            description = str(data[f"{prefix}_description"])
+            num_frames = int(data[f"{prefix}_num_frames"])
+            features_shape = data[f"{prefix}_features"].shape
+            
+            print(f"\n  Step {idx}:")
+            print(f"    Step ID: {step_id}")
+            print(f"    Time: {start_time:.2f}s - {end_time:.2f}s ({end_time-start_time:.2f}s)")
+            print(f"    Description: {description}")
+            print(f"    Frames: {num_frames}")
+            print(f"    Features shape: {features_shape}")
     
     # Calculate statistics
     total_frames = 0
     feature_dims = set()
     
-    for idx in range(num_steps):
-        prefix = f"step_{idx:05d}"
-        num_frames = int(data[f"{prefix}_num_frames"])
-        features = data[f"{prefix}_features"]
-        total_frames += num_frames
-        if len(features.shape) > 1:
-            feature_dims.add(features.shape[1])
+    for recording_id in recording_ids:
+        rec_num_steps = int(data[f"{recording_id}_num_steps"])
+        for idx in range(rec_num_steps):
+            prefix = f"{recording_id}_step_{idx:03d}"
+            num_frames = int(data[f"{prefix}_num_frames"])
+            features = data[f"{prefix}_features"]
+            total_frames += num_frames
+            if len(features.shape) > 1:
+                feature_dims.add(features.shape[1])
     
     print("\n" + "=" * 80)
     print("Summary Statistics:")
     print(f"  Total frames: {total_frames}")
-    print(f"  Average frames per step: {total_frames/num_steps:.2f}")
+    if num_steps > 0:
+        print(f"  Average frames per step: {total_frames/num_steps:.2f}")
     print(f"  Feature dimensions: {feature_dims}")
 
 

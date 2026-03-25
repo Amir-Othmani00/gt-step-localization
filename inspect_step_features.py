@@ -29,6 +29,14 @@ class StepFeatureInspector:
         if mode == 'combined':
             self.num_steps = int(self.data['num_steps'])
             self.recording_id = None
+            self.recording_ids = [str(r) for r in self.data['recording_ids']]
+            
+            # Map flat step index to (recording_id, local_index)
+            self.index_map = []
+            for rid in self.recording_ids:
+                rec_num_steps = int(self.data[f"{rid}_num_steps"])
+                for local_idx in range(rec_num_steps):
+                    self.index_map.append((rid, local_idx))
         else:
             self.recording_id = str(self.data['recording_id'])
             self.num_steps = int(self.data['num_steps'])
@@ -39,9 +47,10 @@ class StepFeatureInspector:
             raise ValueError(f"Step index {step_idx} out of range [0, {self.num_steps})")
         
         if self.mode == 'combined':
-            prefix = f"step_{step_idx:05d}"
+            rid, local_idx = self.index_map[step_idx]
+            prefix = f"{rid}_step_{local_idx:03d}"
             return {
-                'recording_id': str(self.data[f"{prefix}_recording_id"]),
+                'recording_id': rid,
                 'step_id': int(self.data[f"{prefix}_step_id"]),
                 'start_time': float(self.data[f"{prefix}_start_time"]),
                 'end_time': float(self.data[f"{prefix}_end_time"]),
@@ -203,6 +212,7 @@ class StepFeatureInspector:
         recordings = set()
         step_ids = set()
         errors_count = 0
+        steps_per_video = {}
         
         for idx in range(self.num_steps):
             info = self.get_step_info(idx)
@@ -211,6 +221,7 @@ class StepFeatureInspector:
             all_num_frames.append(info['num_frames'])
             recordings.add(info['recording_id'])
             step_ids.add(info['step_id'])
+            steps_per_video[info['recording_id']] = steps_per_video.get(info['recording_id'], 0) + 1
             
             if info['has_errors']:
                 errors_count += 1
@@ -227,6 +238,14 @@ class StepFeatureInspector:
         print(f"  Unique step IDs:   {len(step_ids)}")
         print(f"  Steps with errors: {errors_count} ({100*errors_count/self.num_steps:.1f}%)")
         
+        spv = list(steps_per_video.values())
+        print(f"\nSteps per Video:")
+        print(f"  Mean:     {np.mean(spv):.2f}")
+        print(f"  Std:      {np.std(spv):.2f}")
+        print(f"  Min:      {np.min(spv)}")
+        print(f"  Max:      {np.max(spv)}")
+        print(f"  Median:   {np.median(spv):.0f}")
+
         print(f"\nDuration Statistics (seconds):")
         print(f"  Mean:     {np.mean(all_durations):.2f}")
         print(f"  Std:      {np.std(all_durations):.2f}")
@@ -312,6 +331,28 @@ class StepFeatureInspector:
         return filtered_indices
 
 
+    def show_raw_keys(self, limit: int = 50):
+        """Show raw underlying keys in the npz file."""
+        print(f"\n{'='*80}")
+        print(f"RAW NPZ FILE CONTENTS")
+        print(f"{'='*80}")
+        
+        all_keys = list(self.data.keys())
+        print(f"Total keys: {len(all_keys)}")
+        
+        print("\nFirst 50 keys:")
+        for k in all_keys[:limit]:
+            val = self.data[k]
+            if isinstance(val, np.ndarray):
+                print(f"  {k:45s} : Array of shape {val.shape}, dtype {val.dtype}")
+            else:
+                # Truncate string representations
+                val_str = str(val)[:50] + ("..." if len(str(val)) > 50 else "")
+                print(f"  {k:45s} : {type(val).__name__} = {val_str}")
+        
+        if len(all_keys) > limit:
+            print(f"  ... and {len(all_keys) - limit} more keys")
+
 def main():
     parser = argparse.ArgumentParser(
         description='Inspect and analyze video features per step',
@@ -324,20 +365,8 @@ Examples:
   # List all steps
   python3 inspect_step_features.py video_features_by_steps.npz --list
   
-  # Show details of specific step
-  python3 inspect_step_features.py video_features_by_steps.npz --show 5
-  
-  # Search for steps
-  python3 inspect_step_features.py video_features_by_steps.npz --search "pour" --field description
-  
-  # Compare multiple steps
-  python3 inspect_step_features.py video_features_by_steps.npz --compare 0 5 10
-  
-  # Filter steps
-  python3 inspect_step_features.py video_features_by_steps.npz --filter --min-frames 50 --max-duration 60
-  
-  # Export a step
-  python3 inspect_step_features.py video_features_by_steps.npz --export 5 --output step_5.npz
+  # Show raw underlying npz keys
+  python3 inspect_step_features.py video_features_by_steps.npz --raw
         """
     )
     
@@ -346,6 +375,8 @@ Examples:
                        default='combined', help='File mode')
     
     # Actions
+    parser.add_argument('--raw', action='store_true', 
+                       help='Show raw layout and keys of the npz file')
     parser.add_argument('--summary', action='store_true', 
                        help='Show overall statistics summary')
     parser.add_argument('--list', action='store_true', 
@@ -394,6 +425,10 @@ Examples:
     
     # Execute actions
     action_taken = False
+
+    if args.raw:
+        inspector.show_raw_keys()
+        action_taken = True
     
     if args.summary:
         inspector.get_statistics_summary()

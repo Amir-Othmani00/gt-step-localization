@@ -116,23 +116,35 @@ def process_video(video_path: str,
 def save_all_steps_combined(all_steps: List[Dict], output_path: str):
     """
     Save all steps from all videos into a single npz file.
-    Each step is stored with a unique key.
+    Steps are grouped by recording_id.
     """
     save_dict = {}
     
-    for idx, step_data in enumerate(all_steps):
-        prefix = f"step_{idx:05d}"
-        save_dict[f"{prefix}_recording_id"] = step_data['recording_id']
-        save_dict[f"{prefix}_step_id"] = step_data['step_id']
-        save_dict[f"{prefix}_start_time"] = step_data['start_time']
-        save_dict[f"{prefix}_end_time"] = step_data['end_time']
-        save_dict[f"{prefix}_description"] = step_data['description']
-        save_dict[f"{prefix}_has_errors"] = step_data['has_errors']
-        save_dict[f"{prefix}_features"] = step_data['features']
-        save_dict[f"{prefix}_num_frames"] = step_data['num_frames']
-    
+    # Group steps by recording_id
+    steps_by_video = {}
+    for step_data in all_steps:
+        recording_id = step_data['recording_id']
+        if recording_id not in steps_by_video:
+            steps_by_video[recording_id] = []
+        steps_by_video[recording_id].append(step_data)
+        
+    for recording_id, steps in steps_by_video.items():
+        # Store the number of steps for this recording
+        save_dict[f"{recording_id}_num_steps"] = len(steps)
+        
+        for idx, step_data in enumerate(steps):
+            prefix = f"{recording_id}_step_{idx:03d}"
+            save_dict[f"{prefix}_step_id"] = step_data['step_id']
+            save_dict[f"{prefix}_start_time"] = step_data['start_time']
+            save_dict[f"{prefix}_end_time"] = step_data['end_time']
+            save_dict[f"{prefix}_description"] = step_data['description']
+            save_dict[f"{prefix}_has_errors"] = step_data['has_errors']
+            save_dict[f"{prefix}_features"] = step_data['features']
+            save_dict[f"{prefix}_num_frames"] = step_data['num_frames']
+            
     # Save metadata
     save_dict['num_steps'] = len(all_steps)
+    save_dict['recording_ids'] = list(steps_by_video.keys())
     
     np.savez_compressed(output_path, **save_dict)
     print(f"\nSaved {len(all_steps)} steps to {output_path}")
